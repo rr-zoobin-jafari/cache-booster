@@ -1,0 +1,85 @@
+name: Get AWS IAM Metadata
+description: Retrieves AWS IAM metadata using curl. Useful for debugging and auditing.
+inputs:
+  metadata_version:
+    description: 'The metadata version to use (e.g., latest, 2016-09-03)'
+    required: false
+    default: 'latest'
+  token_ttl:
+    description: 'Token TTL in seconds (only for IMDSv2). Minimum 60, maximum 21600.'
+    required: false
+    default: '300'  # Default to 5 minutes
+  region:
+    description: 'AWS Region (optional, will attempt to detect if not provided)'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Determine AWS Region (if not provided)
+      if: ${{ !inputs.region }}
+      id: get_region
+      shell: bash
+      run: |
+        REGION=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/dynamic/instance-identity/document | jq -r .region)
+        if [ -z "$REGION" ]; then
+          echo "::error title=Region Detection Failed::Unable to determine AWS region. Please provide the 'region' input."
+          exit 1
+        fi
+        echo "::set-output name=region::$REGION"
+    - name: Get IAM Security Credentials (IMDSv2)
+      if: ${{ inputs.metadata_version == 'latest' || inputs.metadata_version == '2017-09-25' }}
+      id: get_iam_token_v2
+      shell: bash
+      run: |
+        TOKEN=$(curl -X PUT "http://169.254.169.254/${{ inputs.metadata_version }}/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: ${{ inputs.token_ttl }}")
+        if [ -z "$TOKEN" ]; then
+          echo "::error title=IMDSv2 Token Retrieval Failed::Failed to retrieve IMDSv2 token."
+          exit 1
+        fi
+        echo "::set-output name=token::$TOKEN"
+    - name: Get IAM Security Credentials (IMDSv1 or IMDSv2)
+      id: get_iam_credentials
+      shell: bash
+      run: |
+        if [[ "${{ inputs.metadata_version }}" == "latest" || "${{ inputs.metadata_version }}" == "2017-09-25" ]]; then
+          CREDENTIALS=$(curl -H "X-aws-ec2-metadata-token: ${{ steps.get_iam_token_v2.outputs.token }}" -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/)
+        else
+          CREDENTIALS=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/)
+        fi
+        if [ -z "$CREDENTIALS" ]; then
+          echo "::error title=IAM Credentials Retrieval Failed::Failed to retrieve IAM credentials."
+          exit 1
+        fi
+        echo "::set-output name=credentials::$CREDENTIALS"
+    - name: Get IAM Role Name (IMDSv1 or IMDSv2)
+      id: get_iam_role
+      shell: bash
+      run: |
+        if [[ "${{ inputs.metadata_version }}" == "latest" || "${{ inputs.metadata_version }}" == "2017-09-25" ]]; then
+          ROLE_NAME=$(curl -H "X-aws-ec2-metadata-token: ${{ steps.get_iam_token_v2.outputs.token }}" -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }})
+        else
+          ROLE_NAME=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }})
+        fi
+        if [ -z "$ROLE_NAME" ]; then
+          echo "::error title=IAM Role Name Retrieval Failed::Failed to retrieve IAM role name."
+          exit 1
+        fi
+        echo "::set-output name=role_name::$ROLE_NAME"
+    - name: Output IAM Role Information
+      shell: bash
+      run: |
+        echo "::group::IAM Role Information"
+        echo "Region: ${{ steps.get_region.outputs.region || inputs.region }}"
+        echo "Role Name: ${{ steps.get_iam_role.outputs.role_name }}"
+        echo "Credentials Endpoint: http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }}"
+        echo "::endgroup::"
+outputs:
+  region:
+    description: "The AWS region."
+    value: ${{ steps.get_region.outputs.region || inputs.region }}
+  role_name:
+    description: "The IAM role name."
+    value: ${{ steps.get_iam_role.outputs.role_name }}
+  credentials_endpoint:
+    description: "The endpoint to retrieve IAM credentials."
+    value: http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }}
