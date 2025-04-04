@@ -21,9 +21,9 @@ runs:
       shell: bash
       run: |
         REGION=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/dynamic/instance-identity/document | jq -r .region)
+        echo "REGION: $REGION";
         if [ -z "$REGION" ]; then
           echo "::error title=Region Detection Failed::Unable to determine AWS region. Please provide the 'region' input."
-          exit 1
         fi
         echo "::set-output name=region::$REGION"
     - name: Get IAM Security Credentials (IMDSv2)
@@ -32,9 +32,9 @@ runs:
       shell: bash
       run: |
         TOKEN=$(curl -X PUT "http://169.254.169.254/${{ inputs.metadata_version }}/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: ${{ inputs.token_ttl }}")
+        echo "IMDSv2Token: $TOKEN";
         if [ -z "$TOKEN" ]; then
           echo "::error title=IMDSv2 Token Retrieval Failed::Failed to retrieve IMDSv2 token."
-          exit 1
         fi
         echo "::set-output name=token::$TOKEN"
     - name: Get IAM Security Credentials (IMDSv1 or IMDSv2)
@@ -43,12 +43,13 @@ runs:
       run: |
         if [[ "${{ inputs.metadata_version }}" == "latest" || "${{ inputs.metadata_version }}" == "2017-09-25" ]]; then
           CREDENTIALS=$(curl -H "X-aws-ec2-metadata-token: ${{ steps.get_iam_token_v2.outputs.token }}" -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/)
+          echo "CREDS: $CREDENTIALS";
         else
           CREDENTIALS=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/)
+          echo "CREDS: $CREDENTIALS";
         fi
         if [ -z "$CREDENTIALS" ]; then
           echo "::error title=IAM Credentials Retrieval Failed::Failed to retrieve IAM credentials."
-          exit 1
         fi
         echo "::set-output name=credentials::$CREDENTIALS"
     - name: Get IAM Role Name (IMDSv1 or IMDSv2)
@@ -57,12 +58,13 @@ runs:
       run: |
         if [[ "${{ inputs.metadata_version }}" == "latest" || "${{ inputs.metadata_version }}" == "2017-09-25" ]]; then
           ROLE_NAME=$(curl -H "X-aws-ec2-metadata-token: ${{ steps.get_iam_token_v2.outputs.token }}" -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }})
+          echo "ROLENAME: $ROLENAME"
         else
           ROLE_NAME=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }})
+          echo "ROLENAME: $ROLENAME"
         fi
         if [ -z "$ROLE_NAME" ]; then
           echo "::error title=IAM Role Name Retrieval Failed::Failed to retrieve IAM role name."
-          exit 1
         fi
         echo "::set-output name=role_name::$ROLE_NAME"
     - name: Output IAM Role Information
