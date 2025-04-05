@@ -16,6 +16,7 @@ runs:
   using: composite
   steps:
     - name: Cache Booster
+      shell: bash
       run: |
          echo "Speeding up Workflow Run. Cache Booster is turned on."
     - name: Determine AWS Region
